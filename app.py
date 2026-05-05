@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue May  5 14:25:16 2026
-
-@author: pcdan
-"""
-
 from flask import Flask, request, render_template_string
 import requests
 from datetime import datetime
@@ -13,14 +6,13 @@ import os
 app = Flask(__name__)
 
 # ---------------------------
-# Configuration serveur FHIR (Public ou Local)
+# FHIR SERVER
 # ---------------------------
-# Remplace par ton URL Render ou HAPI FHIR public si besoin
 URL_PATIENT = "https://hapi.fhir.org/baseR4/Patient"
 URL_OBS = "https://hapi.fhir.org/baseR4/Observation"
 
 # ---------------------------
-# HTML & CSS Moderne
+# HTML
 # ---------------------------
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -30,126 +22,132 @@ HTML_PAGE = """
     <title>FHIR Health Connect</title>
     <style>
         :root { --primary: #2563eb; --bg: #f8fafc; --text: #1e293b; }
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; margin: 0; padding: 20px; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); padding: 20px; }
         .container { max-width: 900px; margin: auto; }
-        header { text-align: center; margin-bottom: 40px; }
-        h1 { color: var(--primary); font-size: 2.5rem; margin-bottom: 5px; }
-        
-        .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 30px; }
-        h2 { border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; color: #334155; font-size: 1.2rem; }
-        
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        input, select { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; }
-        
-        button { background: var(--primary); color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; transition: transform 0.2s, background 0.2s; }
-        button:hover { background: #1d4ed8; transform: translateY(-2px); }
-        
-        .result-box { background: #f1f5f9; border-left: 5px solid var(--primary); padding: 20px; border-radius: 8px; margin-top: 20px; }
-        .badge { background: #dbeafe; color: #1e40af; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; }
-        pre { background: #1e293b; color: #f8fafc; padding: 15px; border-radius: 8px; overflow-x: auto; font-size: 0.9rem; }
+        .card { background: white; padding: 25px; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h2 { border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
+
+        input, select {
+            width: 100%;
+            padding: 10px;
+            margin: 6px 0;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            background: var(--primary);
+            color: white;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            width: 100%;
+            cursor: pointer;
+        }
+
+        button:hover { background: #1d4ed8; }
+
+        .result-box {
+            background: #f1f5f9;
+            padding: 15px;
+            border-left: 5px solid var(--primary);
+            margin-top: 15px;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>FHIR Health Connect</h1>
-            <p>Gestion interopérable des données patients (HL7 FHIR)</p>
-        </header>
 
-        <div class="grid">
-            <!-- Création Patient -->
-            <div class="card">
-                <h2>🧬 Nouveau Patient</h2>
-                <form method="post" action="/create_patient">
-                    <input name="family" placeholder="Nom de famille" required>
-                    <input name="given" placeholder="Prénom" required>
-                    <select name="gender">
-                        <option value="male">Homme</option>
-                        <option value="female">Femme</option>
-                        <option value="other">Autre</option>
-                    </select>
-                    <input type="date" name="birthDate" required>
-                    <button type="submit">Enregistrer le Patient</button>
-                </form>
-            </div>
+<div class="container">
 
-            <!-- Création Observation -->
-            <div class="card">
-                <h2>💓 Nouvelle Observation</h2>
-                <form method="post" action="/create_observation">
-                    <input name="patient_id" placeholder="ID du Patient (ex: 123)" required>
-                    <input type="number" name="value" placeholder="Fréquence Cardiaque (bpm)" required>
-                    <button type="submit">Envoyer la Mesure</button>
-                </form>
-            </div>
-        </div>
+    <div class="card">
+        <h2>🧬 Nouveau Patient</h2>
+        <form method="post" action="/create_patient">
+            <input name="family" placeholder="Nom" required>
+            <input name="given" placeholder="Prénom" required>
+            <select name="gender">
+                <option value="male">Homme</option>
+                <option value="female">Femme</option>
+                <option value="other">Autre</option>
+            </select>
+            <input type="date" name="birthDate" required>
+            <button>Créer Patient</button>
+        </form>
+    </div>
 
-        <div class="card">
-            <h2>🔍 Lecture & Mise à jour</h2>
-            <form method="post" action="/manage_observation">
-                <div style="display: flex; gap: 10px;">
-                    <input name="obs_id" placeholder="ID de l'Observation" required>
-                    <select name="action" style="width: 200px;">
-                        <option value="get">Lire (Afficher)</option>
-                        <option value="delete">Supprimer</option>
-                    </select>
-                </div>
-                <button type="submit" style="background: #64748b;">Exécuter l'action</button>
-            </form>
-            
-            <hr>
-            
-            <form method="post" action="/update_observation">
-                <input name="obs_id" placeholder="ID de l'Observation à modifier" required>
-                <input type="number" name="value" placeholder="Nouvelle valeur bpm" required>
-                <button type="submit" style="background: #059669;">Mettre à jour la valeur</button>
-            </form>
-        </div>
+    <div class="card">
+        <h2>💓 Observation</h2>
+        <form method="post" action="/create_observation">
+            <input name="patient_id" placeholder="ID Patient" required>
+            <input type="number" name="value" placeholder="BPM" required>
+            <button>Créer Observation</button>
+        </form>
+    </div>
 
-        {% if result %}
-        <div class="card result-box">
-            <h2>📊 Résultat de l'opération</h2>
-            <div>{{ result | safe }}</div>
-        </div>
+    <div class="card">
+        <h2>🔧 Gestion Observation</h2>
+
+        <form method="post" action="/manage_observation">
+            <input name="obs_id" placeholder="ID observation" required>
+            <select name="action">
+                <option value="get">Lire</option>
+                <option value="delete">Supprimer</option>
+            </select>
+            <button>Action</button>
+        </form>
+
+        <form method="get" action="/list_patients" style="margin-top:10px;">
+            <button style="background:#7c3aed;">Voir patients</button>
+        </form>
+
+        <form method="post" action="/update_observation" style="margin-top:10px;">
+            <input name="obs_id" placeholder="ID observation" required>
+            <input type="number" name="value" placeholder="Nouvelle valeur" required>
+            <button style="background:#059669;">Modifier</button>
+        </form>
+    </div>
+
+    {% if result %}
+    <div class="card result-box">
+        <h2>Résultat</h2>
+        <div>{{ result | safe }}</div>
+
+        {% if patient_id %}
+        <form method="post" action="/create_observation" style="margin-top:10px;">
+            <input type="hidden" name="patient_id" value="{{ patient_id }}">
+            <button>Créer observation pour ce patient</button>
+        </form>
         {% endif %}
     </div>
+    {% endif %}
+
+</div>
+
 </body>
 </html>
 """
 
 # ---------------------------
-# Fonctions Utilitaires d'affichage
+# Utils
 # ---------------------------
-def format_fhir_result(data, title="Détails"):
-    """Transforme un JSON FHIR complexe en affichage HTML simple"""
-    if isinstance(data, str): return f"<p>{data}</p>"
-    
-    html = f"<span class='badge'>{data.get('resourceType', 'Info')}</span>"
-    
+def format_fhir(data):
+    if isinstance(data, str):
+        return f"<p>{data}</p>"
+
+    html = f"<p><b>{data.get('resourceType')}</b></p>"
+
     if data.get("resourceType") == "Patient":
         name = data.get("name", [{}])[0]
-        html += f"<h3>👤 Patient : {name.get('family', '').upper()} {name.get('given', [''])[0]}</h3>"
-        html += f"<li>ID: <b>{data.get('id')}</b></li>"
-        html += f"<li>Genre: {data.get('gender')}</li>"
-        html += f"<li>Naissance: {data.get('birthDate')}</li>"
-        
-    elif data.get("resourceType") == "Observation":
+        html += f"<p>{name.get('family','')} {name.get('given',[''])[0]}</p>"
+        html += f"<p>ID: {data.get('id')}</p>"
+
+    if data.get("resourceType") == "Observation":
         val = data.get("valueQuantity", {}).get("value")
-        unit = data.get("valueQuantity", {}).get("unit")
-        date = data.get("effectiveDateTime", "").replace("T", " à ")
-        html += f"<h3>📈 Mesure : {val} {unit}</h3>"
-        html += f"<li>ID Observation: <b>{data.get('id')}</b></li>"
-        html += f"<li>Date: {date}</li>"
-        html += f"<li>Sujet: {data.get('subject', {}).get('reference')}</li>"
-    
-    elif "issue" in data: # Cas d'erreur FHIR
-        html = f"<p style='color:red;'>⚠️ Erreur : {data['issue'][0].get('diagnostics', 'Données invalides')}</p>"
-    
-    html += "<details><summary style='cursor:pointer; margin-top:10px; color:blue;'>Voir JSON brut</summary><pre>" + str(data) + "</pre></details>"
+        html += f"<p>Value: {val}</p>"
+
     return html
 
 # ---------------------------
-# Routes Flask
+# ROUTES
 # ---------------------------
 @app.route("/", methods=["GET"])
 def index():
@@ -158,70 +156,112 @@ def index():
 @app.route("/create_patient", methods=["POST"])
 def create_patient():
     data = request.form
+
     patient = {
         "resourceType": "Patient",
         "name": [{"family": data.get("family"), "given": [data.get("given")]}],
         "gender": data.get("gender"),
         "birthDate": data.get("birthDate")
     }
+
     try:
         resp = requests.post(URL_PATIENT, json=patient)
-        res_data = resp.json()
-        result = format_fhir_result(res_data) if resp.status_code in [200, 201] else f"Erreur {resp.status_code}"
+        res = resp.json()
+        result = format_fhir(res)
+
+        patient_id = res.get("id")
+
     except Exception as e:
         result = str(e)
-    return render_template_string(HTML_PAGE, result=result)
+        patient_id = None
+
+    return render_template_string(
+        HTML_PAGE,
+        result=result,
+        patient_id=patient_id
+    )
 
 @app.route("/create_observation", methods=["POST"])
 def create_observation():
     data = request.form
-    observation = {
-        "resourceType": "Observation",
-        "status": "final",
-        "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category","code": "vital-signs"}]}],
-        "code": {"coding": [{"system": "http://loinc.org","code": "8867-4","display": "Heart rate"}]},
-        "subject": {"reference": f"Patient/{data.get('patient_id')}"},
-        "effectiveDateTime": datetime.now().isoformat(),
-        "valueQuantity": {"value": int(data.get("value")), "unit": "bpm", "system": "http://unitsofmeasure.org", "code": "/min"}
-    }
+
     try:
-        resp = requests.post(URL_OBS, json=observation)
-        result = format_fhir_result(resp.json())
+        value = int(data.get("value"))
+
+        obs = {
+            "resourceType": "Observation",
+            "status": "final",
+            "subject": {"reference": f"Patient/{data.get('patient_id')}"},
+            "valueQuantity": {"value": value, "unit": "bpm"}
+        }
+
+        resp = requests.post(URL_OBS, json=obs)
+        result = format_fhir(resp.json())
+
     except Exception as e:
         result = str(e)
+
     return render_template_string(HTML_PAGE, result=result)
 
 @app.route("/update_observation", methods=["POST"])
 def update_observation():
     obs_id = request.form.get("obs_id")
-    new_val = request.form.get("value")
+    value = request.form.get("value")
+
     try:
-        # 1. On récupère l'ancienne
+        value = int(value)
+
         old = requests.get(f"{URL_OBS}/{obs_id}").json()
-        # 2. On modifie la valeur
-        old["valueQuantity"]["value"] = int(new_val)
-        # 3. On renvoie (PUT)
+        old["valueQuantity"]["value"] = value
+
         resp = requests.put(f"{URL_OBS}/{obs_id}", json=old)
-        result = "✅ Mise à jour réussie : <br>" + format_fhir_result(resp.json())
-    except:
-        result = "❌ Erreur : ID introuvable ou serveur injoignable."
+
+        result = format_fhir(resp.json())
+
+    except Exception as e:
+        result = str(e)
+
     return render_template_string(HTML_PAGE, result=result)
 
 @app.route("/manage_observation", methods=["POST"])
 def manage_observation():
     obs_id = request.form.get("obs_id")
     action = request.form.get("action")
+
     try:
         if action == "get":
-            resp = requests.get(f"{URL_OBS}/{obs_id}")
-            result = format_fhir_result(resp.json())
+            data = requests.get(f"{URL_OBS}/{obs_id}").json()
+            result = format_fhir(data)
         else:
             requests.delete(f"{URL_OBS}/{obs_id}")
-            result = f"🗑️ Observation {obs_id} supprimée avec succès."
-    except:
-        result = "Erreur lors de l'action."
+            result = "Deleted"
+
+    except Exception as e:
+        result = str(e)
+
     return render_template_string(HTML_PAGE, result=result)
 
+@app.route("/list_patients", methods=["GET"])
+def list_patients():
+    try:
+        data = requests.get(URL_PATIENT).json()
+        entries = data.get("entry", [])
+
+        html = "<ul>"
+        for e in entries:
+            p = e["resource"]
+            name = p.get("name", [{}])[0]
+            html += f"<li>{name.get('family','')} {name.get('given',[''])[0]} - {p.get('id')}</li>"
+        html += "</ul>"
+
+    except Exception as e:
+        html = str(e)
+
+    return render_template_string(HTML_PAGE, result=html)
+
+# ---------------------------
+# RUN
+# ---------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=True)
