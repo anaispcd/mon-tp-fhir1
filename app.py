@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from flask import Flask, request, render_template_string
 import requests
 from datetime import datetime
@@ -144,16 +146,6 @@ button:hover {
 
 </div>
 
-<!-- ✅ AJOUT : BASE DE DONNÉES VISUELLE -->
-<div class="card">
-<h2>📌 Base de données (rappel IDs)</h2>
-
-{{ patients | safe }}
-
-{{ observations | safe }}
-
-</div>
-
 {% if result %}
 <div class="card">
 <h2>Résultat</h2>
@@ -183,6 +175,7 @@ def format_bundle(bundle):
     for e in entries:
         res = e.get("resource", {})
 
+        # PATIENT
         if res.get("resourceType") == "Patient":
             name = res.get("name", [{}])[0]
             html += f"""
@@ -193,6 +186,7 @@ def format_bundle(bundle):
             </div>
             """
 
+        # OBSERVATION
         elif res.get("resourceType") == "Observation":
             val = res.get("valueQuantity", {}).get("value")
             unit = res.get("valueQuantity", {}).get("unit")
@@ -209,68 +203,14 @@ def format_bundle(bundle):
     return html
 
 # ---------------------------
-# AJOUT LISTES PERMANENTES
-# ---------------------------
-def list_patients():
-    try:
-        resp = requests.get(URL_PATIENT + "?_count=10")
-        data = resp.json()
-
-        html = "<h3>👤 Patients enregistrés</h3>"
-
-        for e in data.get("entry", []):
-            p = e.get("resource", {})
-            name = p.get("name", [{}])[0]
-
-            html += f"""
-            <div class="patient">
-                {name.get('family','')} {name.get('given',[''])[0]}<br>
-                ID : <b>{p.get('id')}</b>
-            </div>
-            """
-
-        return html
-    except:
-        return "<p>Erreur chargement patients</p>"
-
-
-def list_observations():
-    try:
-        resp = requests.get(URL_OBS + "?_count=10")
-        data = resp.json()
-
-        html = "<h3>📊 Observations récentes</h3>"
-
-        for e in data.get("entry", []):
-            o = e.get("resource", {})
-
-            html += f"""
-            <div class="obs">
-                ID : <b>{o.get('id')}</b><br>
-                Patient : {o.get('subject', {}).get('reference')}<br>
-                Valeur : {o.get('valueQuantity', {}).get('value')}
-            </div>
-            """
-
-        return html
-    except:
-        return "<p>Erreur chargement observations</p>"
-
-# ---------------------------
 # ROUTES
 # ---------------------------
 
 @app.route("/", methods=["GET"])
 def index():
-    patients = list_patients()
-    observations = list_observations()
+    return render_template_string(HTML_PAGE)
 
-    return render_template_string(
-        HTML_PAGE,
-        patients=patients,
-        observations=observations
-    )
-
+# CREATE PATIENT
 @app.route("/create_patient", methods=["POST"])
 def create_patient():
     data = request.form
@@ -285,8 +225,12 @@ def create_patient():
     resp = requests.post(URL_PATIENT, json=patient)
     res = resp.json()
 
-    return render_template_string(HTML_PAGE, result=f"Patient créé ID: {res.get('id')}")
+    return render_template_string(
+        HTML_PAGE,
+        result=f"Patient créé ID: {res.get('id')}"
+    )
 
+# CREATE OBSERVATION
 @app.route("/create_observation", methods=["POST"])
 def create_observation():
     data = request.form
@@ -313,6 +257,7 @@ def create_observation():
     except Exception as e:
         return render_template_string(HTML_PAGE, result=str(e))
 
+# GET PATIENT (FILTERED)
 @app.route("/get_patient", methods=["GET"])
 def get_patient():
     pid = request.args.get("id")
@@ -325,6 +270,7 @@ def get_patient():
         result=format_bundle(data)
     )
 
+# GET OBSERVATIONS (FILTERED)
 @app.route("/get_observations", methods=["GET"])
 def get_observations():
     pid = request.args.get("id")
@@ -337,6 +283,7 @@ def get_observations():
         result=format_bundle(data)
     )
 
+# MANAGE OBS
 @app.route("/manage_observation", methods=["POST"])
 def manage():
     obs_id = request.form.get("obs_id")
@@ -345,10 +292,7 @@ def manage():
     try:
         if action == "get":
             data = requests.get(f"{URL_OBS}/{obs_id}").json()
-            return render_template_string(
-                HTML_PAGE,
-                result=format_bundle({"entry":[{"resource":data}]})
-            )
+            return render_template_string(HTML_PAGE, result=format_bundle({"entry":[{"resource":data}]}))
 
         requests.delete(f"{URL_OBS}/{obs_id}")
         return render_template_string(HTML_PAGE, result="Observation supprimée")
