@@ -12,7 +12,7 @@ URL_PATIENT = "https://hapi.fhir.org/baseR4/Patient"
 URL_OBS = "https://hapi.fhir.org/baseR4/Observation"
 
 # ---------------------------
-# HTML
+# HTML + CSS
 # ---------------------------
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -20,18 +20,79 @@ HTML_PAGE = """
 <head>
 <meta charset="UTF-8">
 <title>FHIR Dashboard</title>
+
 <style>
-body { font-family: Arial; background:#f5f5f5; padding:20px; }
-.card { background:white; padding:20px; margin-bottom:20px; border-radius:10px; }
-button { width:100%; padding:10px; margin-top:10px; }
-input, select { width:100%; padding:8px; margin-top:5px; }
+body {
+    font-family: Arial, sans-serif;
+    background: #f4f6f9;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1000px;
+    margin: auto;
+}
+
+.card {
+    background: white;
+    padding: 20px;
+    margin-bottom: 15px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+h2 {
+    margin-top: 0;
+    color: #1f3c88;
+}
+
+input, select {
+    width: 100%;
+    padding: 10px;
+    margin-top: 6px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+}
+
+button {
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    background: #2563eb;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #1d4ed8;
+}
+
+.obs {
+    border-left: 5px solid #2563eb;
+    padding: 10px;
+    margin-bottom: 10px;
+    background: #f9fbff;
+}
+
+.patient {
+    border-left: 5px solid #16a34a;
+    padding: 10px;
+    margin-bottom: 10px;
+    background: #f6fff8;
+}
 </style>
+
 </head>
 
 <body>
+<div class="container">
 
 <div class="card">
-<h2>Créer Patient</h2>
+<h2>🧬 Nouveau Patient</h2>
 <form method="post" action="/create_patient">
 <input name="family" placeholder="Nom" required>
 <input name="given" placeholder="Prénom" required>
@@ -41,24 +102,24 @@ input, select { width:100%; padding:8px; margin-top:5px; }
 <option value="other">Autre</option>
 </select>
 <input type="date" name="birthDate">
-<button>Créer</button>
+<button>Créer Patient</button>
 </form>
 </div>
 
 <div class="card">
-<h2>Créer Observation</h2>
+<h2>💓 Nouvelle Observation</h2>
 <form method="post" action="/create_observation">
-<input name="patient_id" placeholder="Patient ID" required>
+<input name="patient_id" placeholder="ID Patient" required>
 <input name="value" placeholder="BPM" required>
-<button>Créer observation</button>
+<button>Créer Observation</button>
 </form>
 </div>
 
 <div class="card">
-<h2>Actions Observation</h2>
+<h2>🔧 Actions Observation</h2>
 
 <form method="post" action="/manage_observation">
-<input name="obs_id" placeholder="Observation ID">
+<input name="obs_id" placeholder="ID Observation">
 <select name="action">
 <option value="get">Lire</option>
 <option value="delete">Supprimer</option>
@@ -69,16 +130,18 @@ input, select { width:100%; padding:8px; margin-top:5px; }
 </div>
 
 <div class="card">
-<h2>Filtrer Patient (TES données)</h2>
+<h2>🔎 Recherche</h2>
+
 <form method="get" action="/get_patient">
-<input name="id" placeholder="Patient ID" required>
+<input name="id" placeholder="Patient ID">
 <button>Voir patient</button>
 </form>
 
 <form method="get" action="/get_observations">
-<input name="id" placeholder="Patient ID" required>
-<button>Voir observations patient</button>
+<input name="id" placeholder="Patient ID">
+<button>Voir observations</button>
 </form>
+
 </div>
 
 {% if result %}
@@ -88,23 +151,61 @@ input, select { width:100%; padding:8px; margin-top:5px; }
 </div>
 {% endif %}
 
+</div>
 </body>
 </html>
 """
 
 # ---------------------------
-# FORMAT
+# FORMAT FHIR CLEAN
 # ---------------------------
-def fmt(data):
-    if isinstance(data, str):
-        return data
-    return f"<pre>{data}</pre>"
+def format_bundle(bundle):
+    if not isinstance(bundle, dict):
+        return str(bundle)
+
+    entries = bundle.get("entry", [])
+
+    if not entries:
+        return "<p>Aucun résultat</p>"
+
+    html = ""
+
+    for e in entries:
+        res = e.get("resource", {})
+
+        # PATIENT
+        if res.get("resourceType") == "Patient":
+            name = res.get("name", [{}])[0]
+            html += f"""
+            <div class="patient">
+                👤 <b>Patient</b><br>
+                ID: {res.get('id')}<br>
+                Nom: {name.get('family','')} {name.get('given',[''])[0]}
+            </div>
+            """
+
+        # OBSERVATION
+        elif res.get("resourceType") == "Observation":
+            val = res.get("valueQuantity", {}).get("value")
+            unit = res.get("valueQuantity", {}).get("unit")
+
+            html += f"""
+            <div class="obs">
+                📊 <b>Observation</b><br>
+                ID: {res.get('id')}<br>
+                Patient: {res.get('subject', {}).get('reference')}<br>
+                Valeur: {val} {unit}
+            </div>
+            """
+
+    return html
 
 # ---------------------------
 # ROUTES
 # ---------------------------
+
 @app.route("/", methods=["GET"])
-def home():
+def index():
     return render_template_string(HTML_PAGE)
 
 # CREATE PATIENT
@@ -122,12 +223,9 @@ def create_patient():
     resp = requests.post(URL_PATIENT, json=patient)
     res = resp.json()
 
-    patient_id = res.get("id")
-
     return render_template_string(
         HTML_PAGE,
-        result=f"Patient créé ID: {patient_id}",
-        patient_id=patient_id
+        result=f"Patient créé ID: {res.get('id')}"
     )
 
 # CREATE OBSERVATION
@@ -140,18 +238,24 @@ def create_observation():
             "resourceType": "Observation",
             "status": "final",
             "subject": {"reference": f"Patient/{data.get('patient_id')}"},
-            "valueQuantity": {"value": int(data.get("value")), "unit": "bpm"}
+            "valueQuantity": {
+                "value": int(data.get("value")),
+                "unit": "bpm"
+            }
         }
 
         resp = requests.post(URL_OBS, json=obs)
         res = resp.json()
 
-        return render_template_string(HTML_PAGE, result=f"Observation créée ID: {res.get('id')}")
+        return render_template_string(
+            HTML_PAGE,
+            result=f"Observation créée ID: {res.get('id')}"
+        )
 
     except Exception as e:
         return render_template_string(HTML_PAGE, result=str(e))
 
-# GET PATIENT (FILTRÉ)
+# GET PATIENT (FILTERED)
 @app.route("/get_patient", methods=["GET"])
 def get_patient():
     pid = request.args.get("id")
@@ -159,17 +263,23 @@ def get_patient():
     resp = requests.get(f"{URL_PATIENT}?_id={pid}")
     data = resp.json()
 
-    return render_template_string(HTML_PAGE, result=data)
+    return render_template_string(
+        HTML_PAGE,
+        result=format_bundle(data)
+    )
 
-# GET OBSERVATIONS FOR PATIENT (IMPORTANT)
+# GET OBSERVATIONS (FILTERED)
 @app.route("/get_observations", methods=["GET"])
-def get_obs():
+def get_observations():
     pid = request.args.get("id")
 
     resp = requests.get(f"{URL_OBS}?subject=Patient/{pid}")
     data = resp.json()
 
-    return render_template_string(HTML_PAGE, result=data)
+    return render_template_string(
+        HTML_PAGE,
+        result=format_bundle(data)
+    )
 
 # MANAGE OBS
 @app.route("/manage_observation", methods=["POST"])
@@ -177,12 +287,16 @@ def manage():
     obs_id = request.form.get("obs_id")
     action = request.form.get("action")
 
-    if action == "get":
-        data = requests.get(f"{URL_OBS}/{obs_id}").json()
-        return render_template_string(HTML_PAGE, result=data)
+    try:
+        if action == "get":
+            data = requests.get(f"{URL_OBS}/{obs_id}").json()
+            return render_template_string(HTML_PAGE, result=format_bundle({"entry":[{"resource":data}]}))
 
-    requests.delete(f"{URL_OBS}/{obs_id}")
-    return render_template_string(HTML_PAGE, result="deleted")
+        requests.delete(f"{URL_OBS}/{obs_id}")
+        return render_template_string(HTML_PAGE, result="Observation supprimée")
+
+    except Exception as e:
+        return render_template_string(HTML_PAGE, result=str(e))
 
 # ---------------------------
 # RUN
